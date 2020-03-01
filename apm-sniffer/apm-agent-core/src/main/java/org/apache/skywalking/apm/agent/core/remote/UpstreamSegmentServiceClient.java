@@ -55,6 +55,7 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     private long segmentUplinkedCounter;
     private long segmentAbandonedCounter;
     private volatile DataCarrier<UpstreamSegment> carrier;
+    private DataCarrier<TraceSegment> segmentDataCarrier;
     private volatile TraceSegmentReportServiceGrpc.TraceSegmentReportServiceStub serviceStub;
     private volatile GRPCChannelStatus status = GRPCChannelStatus.DISCONNECT;
 	private ScheduledExecutorService scheduler;
@@ -73,6 +74,37 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 		scheduler = new ScheduledThreadPoolExecutor(schedulerSize);
         carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler);
         carrier.consume(this, 1);
+		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
+		segmentDataCarrier.consume(new IConsumer<TraceSegment>() {
+			@Override
+			public void init() {
+			}
+
+			@Override
+			public void consume(List<TraceSegment> data) {
+				if (data == null || data.isEmpty()) {
+					return;
+				}
+
+				try {
+					for (TraceSegment segment : data) {
+						UpstreamSegment upstreamSegment = segment.transform();
+						carrier.produce(upstreamSegment);
+					}
+				} catch (Throwable t) {
+					logger.error(t, "Transform and send segment to fQueue fail.");
+				}
+			}
+
+			@Override
+			public void onError(List<TraceSegment> data, Throwable t) {
+				logger.error(t, "Try to send {} trace segments to collector, with unexpected exception.", data.size());
+			}
+
+			@Override
+			public void onExit() {
+			}
+		}, 1) ;
     }
 
     @Override
@@ -83,6 +115,7 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     @Override
     public void shutdown() {
         TracingContext.ListenerManager.remove(this);
+		segmentDataCarrier.shutdownConsumers();
 		carrier.shutdownConsumers();
 		if (scheduler != null) {
 			scheduler.shutdown();
@@ -178,7 +211,7 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
         if (traceSegment.isIgnore()) {
             return;
         }
-        if (!carrier.produce(traceSegment.transform())) {
+        if (!segmentDataCarrier.produce(traceSegment)) {
             if (logger.isDebugEnable()) {
                 logger.debug("One trace segment has been abandoned, cause by buffer is full.");
             }
