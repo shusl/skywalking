@@ -18,16 +18,23 @@
 
 package org.apache.skywalking.apm.commons.datacarrier;
 
-import org.apache.skywalking.apm.commons.datacarrier.buffer.*;
-import org.apache.skywalking.apm.commons.datacarrier.consumer.*;
-import org.apache.skywalking.apm.commons.datacarrier.partition.*;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.BufferStrategy;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.Channels;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.FQueueChannels;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.QueueCodec;
+import org.apache.skywalking.apm.commons.datacarrier.consumer.ConsumeDriver;
+import org.apache.skywalking.apm.commons.datacarrier.consumer.ConsumerPool;
+import org.apache.skywalking.apm.commons.datacarrier.consumer.IConsumer;
+import org.apache.skywalking.apm.commons.datacarrier.consumer.IDriver;
+import org.apache.skywalking.apm.commons.datacarrier.partition.IDataPartitioner;
+import org.apache.skywalking.apm.commons.datacarrier.partition.SimpleRollingPartitioner;
+
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * DataCarrier main class. use this instance to set Producer/Consumer Model.
  */
 public class DataCarrier<T> {
-    private final int bufferSize;
-    private final int channelSize;
     private Channels<T> channels;
     private IDriver driver;
     private String name;
@@ -42,10 +49,15 @@ public class DataCarrier<T> {
 
     public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize) {
         this.name = name;
-        this.bufferSize = EnvUtil.getInt(envPrefix + "_BUFFER_SIZE", bufferSize);
-        this.channelSize = EnvUtil.getInt(envPrefix + "_CHANNEL_SIZE", channelSize);
+        bufferSize = EnvUtil.getInt(envPrefix + "_BUFFER_SIZE", bufferSize);
+        channelSize = EnvUtil.getInt(envPrefix + "_CHANNEL_SIZE", channelSize);
         channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), BufferStrategy.BLOCKING);
     }
+
+	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler) {
+		this.name = name;
+		this.channels = new FQueueChannels<T>(codec, scheduler);
+	}
 
     /**
      * set a new IDataPartitioner. It will cover the current one or default one.(Default is {@link
@@ -162,5 +174,8 @@ public class DataCarrier<T> {
         if (driver != null) {
             driver.close(channels);
         }
+		if (channels != null) {
+			channels.close();
+		}
     }
 }

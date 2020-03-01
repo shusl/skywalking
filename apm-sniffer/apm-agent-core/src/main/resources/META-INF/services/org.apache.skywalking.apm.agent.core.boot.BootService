@@ -16,7 +16,7 @@
 #
 #
 
-org.apache.skywalking.apm.agent.core.remote.TraceSegmentServiceClient
+org.apache.skywalking.apm.agent.core.remote.UpstreamSegmentServiceClient
 org.apache.skywalking.apm.agent.core.context.ContextManager
 org.apache.skywalking.apm.agent.core.sampling.SamplingService
 org.apache.skywalking.apm.agent.core.remote.GRPCChannelManager

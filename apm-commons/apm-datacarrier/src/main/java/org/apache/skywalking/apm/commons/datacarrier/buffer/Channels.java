@@ -25,12 +25,15 @@ import org.apache.skywalking.apm.commons.datacarrier.partition.IDataPartitioner;
  * buffer is full. The Default is BLOCKING <p> Created by wusheng on 2016/10/25.
  */
 public class Channels<T> {
-    private final QueueBuffer<T>[] bufferChannels;
+    private QueueBuffer<T>[] bufferChannels;
     private IDataPartitioner<T> dataPartitioner;
     private BufferStrategy strategy;
-    private final long size;
+    private long size;
 
-    public Channels(int channelSize, int bufferSize, IDataPartitioner<T> partitioner, BufferStrategy strategy) {
+	public Channels() {
+	}
+
+	public Channels(int channelSize, int bufferSize, IDataPartitioner<T> partitioner, BufferStrategy strategy) {
         this.dataPartitioner = partitioner;
         this.strategy = strategy;
         bufferChannels = new QueueBuffer[channelSize];
@@ -93,4 +96,7 @@ public class Channels<T> {
     public QueueBuffer<T> getBuffer(int index) {
         return this.bufferChannels[index];
     }
+
+    public void close(){
+	}
 }

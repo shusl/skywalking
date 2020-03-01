@@ -106,7 +106,7 @@ public class Config {
          * How long should the agent wait (in minute) before re-registering to the OAP server after receiving reset
          * command
          */
-        public static int COOL_DOWN_THRESHOLD = 10;
+        public static int COOL_DOWN_THRESHOLD = 1;
 
         /**
          * Force reconnection period of grpc, based on grpc_channel_check_interval. If count of check grpc channel
