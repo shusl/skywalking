@@ -29,18 +29,28 @@ public abstract class ServiceThread implements Runnable {
 	private static final AtomicInteger threadId = new AtomicInteger(0);
 	private static final long JOIN_TIME = 90 * 1000;
 
-    protected final Thread thread;
+    protected Thread thread;
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
     protected volatile boolean stopped = false;
+    protected boolean isDaemon = false;
+
+    //Make it able to restart the thread
+    private final AtomicBoolean started = new AtomicBoolean(false);
 
     public ServiceThread() {
-        this.thread = new Thread(this, this.getServiceName() + "-" + threadId.incrementAndGet());
     }
 
     public abstract String getServiceName();
 
     public void start() {
+        log.info("Try to start service thread:{} started:{} lastThread:{}", getServiceName(), started.get(), thread);
+        if (!started.compareAndSet(false, true)) {
+            return;
+        }
+        stopped = false;
+		this.thread = new Thread(this, this.getServiceName() + "-" + threadId.incrementAndGet());
+        this.thread.setDaemon(isDaemon);
         this.thread.start();
     }
 
@@ -49,6 +59,10 @@ public abstract class ServiceThread implements Runnable {
     }
 
     public void shutdown(final boolean interrupt) {
+        log.info("Try to shutdown service thread:{} started:{} lastThread:{}", getServiceName(), started.get(), thread);
+        if (!started.compareAndSet(true, false)) {
+            return;
+        }
         this.stopped = true;
         log.info("shutdown thread " + this.getServiceName() + " interrupt " + interrupt);
 
@@ -61,13 +75,15 @@ public abstract class ServiceThread implements Runnable {
                 this.thread.interrupt();
             }
 
-            long beginTime = System.currentTimeMillis();
+            long beginTime = System.nanoTime();
             if (!this.thread.isDaemon()) {
                 this.thread.join(this.getJoinTime());
             }
-            long eclipseTime = System.currentTimeMillis() - beginTime;
-            log.info("join thread " + this.getServiceName() + " eclipse time(ms) " + eclipseTime + " "
-                + this.getJoinTime());
+			long elapsedTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - beginTime);
+            if (elapsedTime > 1000){
+            	log.info("join thread " + this.getServiceName() + " elapsedTime time(ms) " + elapsedTime + " max wait time: "
+						+ this.getJoinTime());
+			}
         } catch (InterruptedException e) {
             log.error("Interrupted", e);
         }
@@ -77,24 +93,10 @@ public abstract class ServiceThread implements Runnable {
         return JOIN_TIME;
     }
 
-    public void stop() {
-        this.stop(false);
-    }
-
-    public void stop(final boolean interrupt) {
-        this.stopped = true;
-        log.info("stop thread " + this.getServiceName() + " interrupt " + interrupt);
-
-        if (hasNotified.compareAndSet(false, true)) {
-            waitPoint.countDown(); // notify
-        }
-
-        if (interrupt) {
-            this.thread.interrupt();
-        }
-    }
-
     public void makeStop() {
+        if (!started.get()) {
+            return;
+        }
         this.stopped = true;
         log.info("makeStop thread " + this.getServiceName());
     }
@@ -129,5 +131,13 @@ public abstract class ServiceThread implements Runnable {
 
     public boolean isStopped() {
         return stopped;
+    }
+
+    public boolean isDaemon() {
+        return isDaemon;
+    }
+
+    public void setDaemon(boolean daemon) {
+        isDaemon = daemon;
     }
 }

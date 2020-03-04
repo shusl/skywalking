@@ -20,6 +20,8 @@ package org.apache.skywalking.oap.server.library.buffer;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+
+import com.google.common.base.Stopwatch;
 import org.apache.skywalking.apm.network.language.agent.*;
 import org.slf4j.*;
 
@@ -31,7 +33,7 @@ public class BufferStreamTestCase {
     private static final Logger logger = LoggerFactory.getLogger(BufferStreamTestCase.class);
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        String directory = "/Users/pengys5/code/sky-walking/buffer-test";
+        String directory = "/opt/downloads/buffer-test";
         BufferStream.Builder<TraceSegmentObject> builder = new BufferStream.Builder<>(directory);
 //        builder.cleanWhenRestart(true);
         builder.dataFileMaxSize(50);
@@ -51,13 +53,14 @@ public class BufferStreamTestCase {
         for (int i = 0; i < 1000; i++) {
             str.append("main DEBUG Registering MBean org.apache.logging.log4j2:type=6d6f6e28 main DEBUG Registering MBean org.apache.logging.log4j2:type=6d6f6e28 main DEBUG Registering MBean org.apache.logging.log4j2:type=6d6f6e28");
         }
+		String value = str.toString();
+		Stopwatch stopwatch = Stopwatch.createStarted();
+		for (int i = 0; i < 20000; i++) {
+			TraceSegmentObject.Builder segment = TraceSegmentObject.newBuilder();
+			SpanObject.Builder span = SpanObject.newBuilder();
 
-        for (int i = 0; i < 20000; i++) {
-            TraceSegmentObject.Builder segment = TraceSegmentObject.newBuilder();
-            SpanObject.Builder span = SpanObject.newBuilder();
-
-            span.setSpanId(i);
-            span.setOperationName(str.toString());
+			span.setSpanId(i);
+			span.setOperationName(value);
             segment.addSpans(span);
             stream.write(segment.build());
 
@@ -65,5 +68,6 @@ public class BufferStreamTestCase {
                 TimeUnit.MILLISECONDS.sleep(50);
             }
         }
+		System.out.println("test bufferStream used " + stopwatch.elapsed(TimeUnit.MILLISECONDS));
     }
 }

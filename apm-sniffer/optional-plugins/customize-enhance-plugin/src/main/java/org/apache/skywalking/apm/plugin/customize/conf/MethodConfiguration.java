@@ -64,6 +64,10 @@ public class MethodConfiguration {
     static void setCloseAfterMethod(Map<String, Object> configuration, Boolean closeAfterMethod) {
         configuration.put(Constants.CONFIGURATION_ATTRIBUTE_CLOSE_AFTER_METHOD, closeAfterMethod);
     }
+    
+    static void setMethodIsEntryPoint(Map<String, Object> configuration, Boolean isEntryPoint) {
+        configuration.put(Constants.CONFIGURATION_ATTRIBUTE_ENTRY_POINT, isEntryPoint);
+    }
 
     static void setStatic(Map<String, Object> configuration, Boolean isStatic) {
         configuration.put(Constants.CONFIGURATION_ATTRIBUTE_IS_STATIC, isStatic);
@@ -131,6 +135,10 @@ public class MethodConfiguration {
 
     public static boolean isCloseAfterMethod(Map<String, Object> configuration) {
         return (Boolean) configuration.get(Constants.CONFIGURATION_ATTRIBUTE_CLOSE_AFTER_METHOD);
+    }
+    
+    public static boolean isEntryPointMethod(Map<String, Object> configuration) {
+        return (Boolean) configuration.get(Constants.CONFIGURATION_ATTRIBUTE_ENTRY_POINT);
     }
 
     @SuppressWarnings("unchecked")

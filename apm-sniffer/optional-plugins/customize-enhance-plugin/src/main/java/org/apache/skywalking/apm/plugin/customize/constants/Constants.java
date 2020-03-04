@@ -50,6 +50,8 @@ public class Constants {
 
     public static final String XML_ELEMENT_OPERATION_NAME_SUFFIX = "operation_name_suffix";
 
+    public static final String XML_ELEMENT_ENTRY_POINT = "entry_point";
+
     public static final String XML_ELEMENT_TAG = "tag";
 
     public static final String XML_ELEMENT_LOG = "log";
@@ -58,9 +60,12 @@ public class Constants {
 
     public static final String CONTEXT_METHOD_CONFIGURATIONS = "CONTEXT_METHOD_CONFIGURATIONS";
 
-    public static final String CONTEXT_ENHANCE_CLASSES = "CONTEXT_ENHANCE_CLASSES";
 
-    public static final String CONFIGURATION_ATTRIBUTE_METHOD = "CONFIGURATION_ATTRIBUTE_METHOD";
+	public static final String CONTEXT_ENHANCE_CLASSES = "CONTEXT_ENHANCE_CLASSES";
+
+	public static final String CONFIGURATION_ATTRIBUTE_METHOD = "CONFIGURATION_ATTRIBUTE_METHOD";
+	
+	public static final String CONFIGURATION_ATTRIBUTE_ENTRY_POINT = "CONTEXT_METHOD_ENTRY_POINT";
 
     public static final String CONFIGURATION_ATTRIBUTE_METHOD_NAME = "CONFIGURATION_ATTRIBUTE_METHOD_NAME";
 
