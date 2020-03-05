@@ -75,8 +75,7 @@ class BaseInterceptorMethods {
 
                 AbstractSpan span;
                 if (MethodConfiguration.isEntryPointMethod(configuration)){
-					ContextCarrier contextCarrier = new ContextCarrier();
-					span = ContextManager.createEntrySpan(operationName, contextCarrier);
+					span = ContextManager.createEntrySpan(operationName, null);
 				}else {
 					span = ContextManager.createLocalSpan(operationName);
 				}
