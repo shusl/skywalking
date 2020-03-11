@@ -54,9 +54,9 @@ public class DataCarrier<T> {
         channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), BufferStrategy.BLOCKING);
     }
 
-	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler) {
+	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler, int logSize) {
 		this.name = name;
-		this.channels = new FQueueChannels<T>(codec, scheduler);
+		this.channels = new FQueueChannels<T>(codec, scheduler, logSize);
 	}
 
     /**

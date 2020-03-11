@@ -23,6 +23,7 @@ import org.apache.skywalking.apm.agent.core.context.trace.TraceSegment;
 import org.apache.skywalking.apm.agent.core.logging.core.LogLevel;
 import org.apache.skywalking.apm.agent.core.logging.core.LogOutput;
 import org.apache.skywalking.apm.agent.core.logging.core.WriterFactory;
+import org.omg.CORBA.PUBLIC_MEMBER;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -118,6 +119,11 @@ public class Config {
          * Limit the length of the operationName to prevent errors when inserting elasticsearch
          **/
         public static int OPERATION_NAME_THRESHOLD = 500;
+
+		/**
+		 * grpc netty threads
+		 */
+		public static int GRPC_EVENT_LOOP_THREADS = 4;
     }
 
     public static class Collector {
@@ -146,10 +152,25 @@ public class Config {
         public static int BUFFER_SIZE = 60 * 10;
     }
 
+    public static class FQueue{
+		/**
+		 * log rotate size
+		 */
+		public static int LOG_SIZE = 1024 * 1024 * 10;
+		/**
+		 * fqueue scheduler threads
+		 */
+    	public static int THREADS = 2;
+		/**
+		 * disable fqueue log
+		 */
+		public static boolean DISABLED = false;
+	}
+
     public static class Buffer {
         public static int CHANNEL_SIZE = 5;
 
-        public static int BUFFER_SIZE = 300;
+        public static int BUFFER_SIZE = 3000;
     }
 
     public static class Dictionary {

@@ -33,11 +33,13 @@ import org.apache.skywalking.apm.agent.core.logging.api.LogManager;
 import org.apache.skywalking.apm.commons.datacarrier.DataCarrier;
 import org.apache.skywalking.apm.commons.datacarrier.EnvUtil;
 import org.apache.skywalking.apm.commons.datacarrier.buffer.BufferStrategy;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.FQueueBuffer;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.IConsumer;
 import org.apache.skywalking.apm.network.common.Commands;
 import org.apache.skywalking.apm.network.language.agent.UpstreamSegment;
 import org.apache.skywalking.apm.network.language.agent.v2.TraceSegmentReportServiceGrpc;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -70,16 +72,31 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
         lastLogTime = System.currentTimeMillis();
         segmentUplinkedCounter = 0;
         segmentAbandonedCounter = 0;
-		int schedulerSize = EnvUtil.getInt("FQueue.scheduler.threads", 2);
-		scheduler = new ScheduledThreadPoolExecutor(schedulerSize);
-        carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler);
-        carrier.consume(this, 1);
-		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
-		segmentDataCarrier.consume(new IConsumer<TraceSegment>() {
-			@Override
-			public void init() {
-			}
+		if (Config.FQueue.DISABLED) {
+			initWithoutFQueue();
+		}else{
+			initWithFQueue();
+		}
+	}
 
+	private void initWithoutFQueue() {
+		logger.info("init data carrier without FQueue with buffer size {}", BUFFER_SIZE);
+		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
+		segmentDataCarrier.consume(new AbstractConsumer<TraceSegment>() {
+			@Override
+			public void consume(List<TraceSegment> data) {
+				consumeTraceSegment(data);
+			}
+		}, 1);
+	}
+
+	private void initWithFQueue() {
+		scheduler = new ScheduledThreadPoolExecutor(Config.FQueue.THREADS);
+		carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler, Config.FQueue.LOG_SIZE);
+		carrier.consume(this, 1);
+		logger.info("init data carrier with buffer size {}", BUFFER_SIZE);
+		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
+		segmentDataCarrier.consume(new AbstractConsumer<TraceSegment>() {
 			@Override
 			public void consume(List<TraceSegment> data) {
 				if (data == null || data.isEmpty()) {
@@ -95,19 +112,10 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 					logger.error(t, "Transform and send segment to fQueue fail.");
 				}
 			}
-
-			@Override
-			public void onError(List<TraceSegment> data, Throwable t) {
-				logger.error(t, "Try to send {} trace segments to collector, with unexpected exception.", data.size());
-			}
-
-			@Override
-			public void onExit() {
-			}
 		}, 1) ;
-    }
+	}
 
-    @Override
+	@Override
     public void onComplete() {
         TracingContext.ListenerManager.add(this);
     }
@@ -116,7 +124,9 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     public void shutdown() {
         TracingContext.ListenerManager.remove(this);
 		segmentDataCarrier.shutdownConsumers();
-		carrier.shutdownConsumers();
+		if (carrier != null){
+			carrier.shutdownConsumers();
+		}
 		if (scheduler != null) {
 			scheduler.shutdown();
 		}
@@ -129,58 +139,75 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 
     @Override
     public void consume(List<UpstreamSegment> data) {
-        if (CONNECTED.equals(status)) {
-            final GRPCStreamServiceStatus status = new GRPCStreamServiceStatus(false);
-            StreamObserver<UpstreamSegment> upstreamSegmentStreamObserver = serviceStub.withDeadlineAfter(
-                Config.Collector.GRPC_UPSTREAM_TIMEOUT, TimeUnit.SECONDS
-            ).collect(new StreamObserver<Commands>() {
-                @Override
-                public void onNext(Commands commands) {
-                    ServiceManager.INSTANCE.findService(CommandService.class)
-                                           .receiveCommand(commands);
-                }
+		consumeUpstreamSegment(data);
+	}
 
-                @Override
-                public void onError(
-                    Throwable throwable) {
-                    status.finished();
-                    if (logger.isErrorEnable()) {
-                        logger.error(
-                            throwable,
-                            "Send UpstreamSegment to collector fail with a grpc internal exception."
-                        );
-                    }
-                    ServiceManager.INSTANCE
-                        .findService(GRPCChannelManager.class)
-                        .reportError(throwable);
-                }
+	private void consumeTraceSegment(List<TraceSegment> data){
+		if (CONNECTED.equals(status)) {
+			List<UpstreamSegment> dataUpstream = new ArrayList<UpstreamSegment>(data.size());
+			for (TraceSegment segment : data) {
+				dataUpstream.add(segment.transform());
+			}
+			consumeUpstreamSegment(dataUpstream);
+		} else {
+			segmentAbandonedCounter += data.size();
+		}
+		printUplinkStatus();
+	}
 
-                @Override
-                public void onCompleted() {
-                    status.finished();
-                }
-            });
+	private void consumeUpstreamSegment(List<UpstreamSegment> data) {
+		if (CONNECTED.equals(status)) {
+			final GRPCStreamServiceStatus status = new GRPCStreamServiceStatus(false);
+			StreamObserver<UpstreamSegment> upstreamSegmentStreamObserver = serviceStub.withDeadlineAfter(
+				Config.Collector.GRPC_UPSTREAM_TIMEOUT, TimeUnit.SECONDS
+			).collect(new StreamObserver<Commands>() {
+				@Override
+				public void onNext(Commands commands) {
+					ServiceManager.INSTANCE.findService(CommandService.class)
+										   .receiveCommand(commands);
+				}
 
-            try {
-                for (UpstreamSegment segment : data) {
-                    upstreamSegmentStreamObserver.onNext(segment);
-                }
-            } catch (Throwable t) {
-                logger.error(t, "Transform and send UpstreamSegment to collector fail.");
-            }
+				@Override
+				public void onError(
+					Throwable throwable) {
+					status.finished();
+					if (logger.isErrorEnable()) {
+						logger.error(
+							throwable,
+							"Send UpstreamSegment to collector fail with a grpc internal exception."
+						);
+					}
+					ServiceManager.INSTANCE
+						.findService(GRPCChannelManager.class)
+						.reportError(throwable);
+				}
 
-            upstreamSegmentStreamObserver.onCompleted();
+				@Override
+				public void onCompleted() {
+					status.finished();
+				}
+			});
 
-            status.wait4Finish();
-            segmentUplinkedCounter += data.size();
-        } else {
-            segmentAbandonedCounter += data.size();
-        }
+			try {
+				for (UpstreamSegment segment : data) {
+					upstreamSegmentStreamObserver.onNext(segment);
+				}
+			} catch (Throwable t) {
+				logger.error(t, "Transform and send UpstreamSegment to collector fail.");
+			}
 
-        printUplinkStatus();
-    }
+			upstreamSegmentStreamObserver.onCompleted();
 
-    private void printUplinkStatus() {
+			status.wait4Finish();
+			segmentUplinkedCounter += data.size();
+		} else {
+			segmentAbandonedCounter += data.size();
+		}
+
+		printUplinkStatus();
+	}
+
+	private void printUplinkStatus() {
         long currentTimeMillis = System.currentTimeMillis();
         if (currentTimeMillis - lastLogTime > 30 * 1000) {
             lastLogTime = currentTimeMillis;
@@ -205,6 +232,22 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     public void onExit() {
 
     }
+
+    abstract class AbstractConsumer<T> implements IConsumer<T>{
+		@Override
+		public void init() {
+		}
+
+		@Override
+		public void onError(List<T> data, Throwable t) {
+			logger.error(t, "Try to send {} trace segments to collector, with unexpected exception.", data.size());
+		}
+
+		@Override
+		public void onExit() {
+
+		}
+	}
 
     @Override
     public void afterFinished(TraceSegment traceSegment) {

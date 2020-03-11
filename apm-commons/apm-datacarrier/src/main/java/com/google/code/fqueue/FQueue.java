@@ -41,7 +41,7 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 	private FSQueue fsQueue = null;
 	private static final Logger log = LoggerFactory.getLogger(FQueue.class);
 	private Lock lock = new ReentrantLock();
-
+	private boolean closed = false;
 
 	public FQueue(String path, ScheduledExecutorService executorService) throws Exception {
 		fsQueue = new FSQueue(path, 1024 * 1024 * 300, executorService);
@@ -64,6 +64,9 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 	public boolean offer(byte[] e, int offset, int length) {
 		lock.lock();
 		try {
+			if (closed) {
+				return false;
+			}
 			fsQueue.add(e, offset, length);
 			return true;
 		} catch (IOException e1) {
@@ -85,6 +88,9 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 	public byte[] peek() {
 		lock.lock();
 		try {
+			if (closed) {
+				return null;
+			}
 			return fsQueue.peek();
 		} catch (IOException e) {
 			log.error(e.getMessage(), e);
@@ -104,6 +110,9 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 	public byte[] remove(){
 		lock.lock();
 		try {
+			if (closed) {
+				return null;
+			}
 			fsQueue.remove();
 		} catch (FileEOFException e) {
 			log.error(e.getMessage(), e);
@@ -115,8 +124,11 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 
 	@Override
 	public byte[] poll() {
+		lock.lock();
 		try {
-			lock.lock();
+			if (closed) {
+				return null;
+			}
 			return fsQueue.readNextAndRemove();
 		} catch (IOException e) {
 			log.error(e.getMessage(), e);
@@ -130,8 +142,17 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 	}
 
 	public void close() {
-		if (fsQueue != null) {
-			fsQueue.close();
+		lock.lock();
+		try {
+			if (closed) {
+				return;
+			}
+			closed = true;
+			if (fsQueue != null) {
+				fsQueue.close();
+			}
+		}finally {
+			lock.unlock();
 		}
 	}
 }

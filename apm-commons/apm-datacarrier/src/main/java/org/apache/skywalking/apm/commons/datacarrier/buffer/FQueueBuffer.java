@@ -13,19 +13,34 @@ import java.util.concurrent.ScheduledExecutorService;
 public class FQueueBuffer<T> implements QueueBuffer<T> {
 	private FQueue fQueue;
 	private QueueCodec<T> codec;
-	private int maxBatchSize = 1000;
+	private int maxBatchSize = 2000;
 
-	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService) {
-		this.codec = codec;
-		int logSize = 1024 * 1024 * 10;
-		logSize = EnvUtil.getInt("FQueue.log.size", logSize);
-		maxBatchSize = EnvUtil.getInt("FQueue.batch.size", maxBatchSize);
+	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService, int logSize) {
+		maxBatchSize = getIntProperty("FQueue.batch.size", 2000);
 		String dbPath = System.getProperty("FQueue.db.path", "./db");
+		this.codec = codec;
 		try {
 			fQueue = new FQueue(dbPath, logSize, executorService);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+
+
+	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService) {
+		this(codec, executorService, getIntProperty("FQueue.log.size", 1024 * 1024 * 30));
+	}
+
+	public static int getIntProperty(String key, int defaultValue) {
+		int retVal = defaultValue;
+		String val = System.getProperty(key);
+		if (val != null) {
+			try {
+				retVal = Integer.parseInt(val);
+			} catch (NumberFormatException ignore) {
+			}
+		}
+		return retVal;
 	}
 
 	@Override
@@ -72,6 +87,7 @@ public class FQueueBuffer<T> implements QueueBuffer<T> {
 	public void close(){
 		if (fQueue != null) {
 			fQueue.close();
+			fQueue = null;
 		}
 	}
 }

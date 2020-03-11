@@ -9,8 +9,8 @@ import java.util.concurrent.ScheduledExecutorService;
 public class FQueueChannels<T> extends Channels<T> {
 	private FQueueBuffer<T> fQueueBuffer;
 
-	public FQueueChannels(QueueCodec<T> codec, ScheduledExecutorService scheduler) {
-		fQueueBuffer = new FQueueBuffer<T>(codec, scheduler);
+	public FQueueChannels(QueueCodec<T> codec, ScheduledExecutorService scheduler, int logSize) {
+		fQueueBuffer = new FQueueBuffer<T>(codec, scheduler, logSize);
 	}
 
 	@Override
