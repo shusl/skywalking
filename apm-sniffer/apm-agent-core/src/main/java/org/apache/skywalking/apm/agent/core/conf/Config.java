@@ -164,7 +164,7 @@ public class Config {
 		/**
 		 * disable fqueue log
 		 */
-		public static boolean DISABLED = false;
+		public static boolean DISABLED = true;
 	}
 
     public static class Buffer {
