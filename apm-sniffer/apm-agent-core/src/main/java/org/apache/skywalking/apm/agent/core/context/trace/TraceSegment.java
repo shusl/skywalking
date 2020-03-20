@@ -163,29 +163,35 @@ public class TraceSegment {
      */
     public UpstreamSegment transform() {
         UpstreamSegment.Builder upstreamBuilder = UpstreamSegment.newBuilder();
-        for (DistributedTraceId distributedTraceId : getRelatedGlobalTraces()) {
-            upstreamBuilder = upstreamBuilder.addGlobalTraceIds(distributedTraceId.toUniqueId());
-        }
-        SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
-        /**
-         * Trace Segment
-         */
-        traceSegmentBuilder.setTraceSegmentId(this.traceSegmentId.transform());
-        // Don't serialize TraceSegmentReference
+		SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
 
-        // SpanObject
-        for (AbstractTracingSpan span : this.spans) {
-            traceSegmentBuilder.addSpans(span.transform());
-        }
-        traceSegmentBuilder.setServiceId(RemoteDownstreamConfig.Agent.SERVICE_ID);
-        traceSegmentBuilder.setServiceInstanceId(RemoteDownstreamConfig.Agent.SERVICE_INSTANCE_ID);
-        traceSegmentBuilder.setIsSizeLimited(this.isSizeLimited);
+		appendTraceSegment(upstreamBuilder, traceSegmentBuilder);
 
-        upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
+		upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
         return upstreamBuilder.build();
     }
 
-    @Override
+	public void appendTraceSegment(UpstreamSegment.Builder upstreamBuilder, SegmentObject.Builder traceSegmentBuilder) {
+		for (DistributedTraceId distributedTraceId : getRelatedGlobalTraces()) {
+			upstreamBuilder = upstreamBuilder.addGlobalTraceIds(distributedTraceId.toUniqueId());
+		}
+
+		/**
+		 * Trace Segment
+		 */
+		traceSegmentBuilder.setTraceSegmentId(this.traceSegmentId.transform());
+		// Don't serialize TraceSegmentReference
+
+		// SpanObject
+		for (AbstractTracingSpan span : this.spans) {
+			traceSegmentBuilder.addSpans(span.transform());
+		}
+		traceSegmentBuilder.setServiceId(RemoteDownstreamConfig.Agent.SERVICE_ID);
+		traceSegmentBuilder.setServiceInstanceId(RemoteDownstreamConfig.Agent.SERVICE_INSTANCE_ID);
+		traceSegmentBuilder.setIsSizeLimited(this.isSizeLimited);
+	}
+
+	@Override
     public String toString() {
         return "TraceSegment{" +
             "traceSegmentId='" + traceSegmentId + '\'' +

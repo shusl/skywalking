@@ -15,20 +15,14 @@ public class FQueueBuffer<T> implements QueueBuffer<T> {
 	private QueueCodec<T> codec;
 	private int maxBatchSize = 2000;
 
-	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService, int logSize) {
-		maxBatchSize = getIntProperty("FQueue.batch.size", 2000);
-		String dbPath = System.getProperty("FQueue.db.path", "./db");
+	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService, String dbPath, int batchSize, int logSize) {
+		maxBatchSize = batchSize;
 		this.codec = codec;
 		try {
 			fQueue = new FQueue(dbPath, logSize, executorService);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-	}
-
-
-	public FQueueBuffer(QueueCodec<T> codec, ScheduledExecutorService executorService) {
-		this(codec, executorService, getIntProperty("FQueue.log.size", 1024 * 1024 * 30));
 	}
 
 	public static int getIntProperty(String key, int defaultValue) {

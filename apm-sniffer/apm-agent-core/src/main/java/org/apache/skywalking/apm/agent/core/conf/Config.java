@@ -153,10 +153,14 @@ public class Config {
     }
 
     public static class FQueue{
+    	
+		public static String DB_PATH = "./db";
+
+		public static int BATCH_SIZE = 50000;
 		/**
 		 * log rotate size
 		 */
-		public static int LOG_SIZE = 1024 * 1024 * 10;
+		public static int LOG_SIZE = 1024 * 1024 * 30;
 		/**
 		 * fqueue scheduler threads
 		 */
@@ -165,12 +169,20 @@ public class Config {
 		 * disable fqueue log
 		 */
 		public static boolean DISABLED = true;
+
+		public static int CONSUMER_CYCLE = 20;
 	}
 
     public static class Buffer {
         public static int CHANNEL_SIZE = 5;
 
-        public static int BUFFER_SIZE = 3000;
+        public static int BUFFER_SIZE = 15000;
+
+        public static boolean BLOCK_STRATEGY  = false;
+
+		public static boolean PACK_UPSTREAM = true;
+
+		public static int CONSUMER_CYCLE = 200;
     }
 
     public static class Dictionary {

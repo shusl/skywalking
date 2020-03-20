@@ -31,12 +31,10 @@ import org.apache.skywalking.apm.agent.core.context.trace.TraceSegment;
 import org.apache.skywalking.apm.agent.core.logging.api.ILog;
 import org.apache.skywalking.apm.agent.core.logging.api.LogManager;
 import org.apache.skywalking.apm.commons.datacarrier.DataCarrier;
-import org.apache.skywalking.apm.commons.datacarrier.EnvUtil;
-import org.apache.skywalking.apm.commons.datacarrier.buffer.BufferStrategy;
-import org.apache.skywalking.apm.commons.datacarrier.buffer.FQueueBuffer;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.IConsumer;
 import org.apache.skywalking.apm.network.common.Commands;
 import org.apache.skywalking.apm.network.language.agent.UpstreamSegment;
+import org.apache.skywalking.apm.network.language.agent.v2.SegmentObject;
 import org.apache.skywalking.apm.network.language.agent.v2.TraceSegmentReportServiceGrpc;
 
 import java.util.ArrayList;
@@ -45,8 +43,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.skywalking.apm.agent.core.conf.Config.Buffer.BUFFER_SIZE;
-import static org.apache.skywalking.apm.agent.core.conf.Config.Buffer.CHANNEL_SIZE;
+import static org.apache.skywalking.apm.agent.core.conf.Config.Buffer.*;
 import static org.apache.skywalking.apm.agent.core.remote.GRPCChannelStatus.CONNECTED;
 
 @DefaultImplementor
@@ -81,21 +78,22 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 
 	private void initWithoutFQueue() {
 		logger.info("init data carrier without FQueue with buffer size {}", BUFFER_SIZE);
-		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
+		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE, BLOCK_STRATEGY);
 		segmentDataCarrier.consume(new AbstractConsumer<TraceSegment>() {
 			@Override
 			public void consume(List<TraceSegment> data) {
 				consumeTraceSegment(data);
 			}
-		}, 1);
+		}, 1, CONSUMER_CYCLE);
 	}
 
 	private void initWithFQueue() {
 		scheduler = new ScheduledThreadPoolExecutor(Config.FQueue.THREADS);
-		carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler, Config.FQueue.LOG_SIZE);
-		carrier.consume(this, 1);
+		carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler,
+				Config.FQueue.DB_PATH, Config.FQueue.BATCH_SIZE, Config.FQueue.LOG_SIZE);
+		carrier.consume(this, 1, Config.FQueue.CONSUMER_CYCLE);
 		logger.info("init data carrier with buffer size {}", BUFFER_SIZE);
-		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE);
+		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE, BLOCK_STRATEGY);
 		segmentDataCarrier.consume(new AbstractConsumer<TraceSegment>() {
 			@Override
 			public void consume(List<TraceSegment> data) {
@@ -104,15 +102,26 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 				}
 
 				try {
-					for (TraceSegment segment : data) {
-						UpstreamSegment upstreamSegment = segment.transform();
+					if (PACK_UPSTREAM) {
+						UpstreamSegment.Builder upstreamBuilder = UpstreamSegment.newBuilder();
+						SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
+						for (TraceSegment segment : data) {
+							segment.appendTraceSegment(upstreamBuilder, traceSegmentBuilder);
+						}
+						upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
+						UpstreamSegment upstreamSegment = upstreamBuilder.build();
 						carrier.produce(upstreamSegment);
+					}else{
+						for (TraceSegment segment : data) {
+							UpstreamSegment upstreamSegment = segment.transform();
+							carrier.produce(upstreamSegment);
+						}
 					}
 				} catch (Throwable t) {
 					logger.error(t, "Transform and send segment to fQueue fail.");
 				}
 			}
-		}, 1) ;
+		}, 1, CONSUMER_CYCLE) ;
 	}
 
 	@Override
@@ -122,6 +131,7 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 
     @Override
     public void shutdown() {
+		logger.info("shutdown service client");
         TracingContext.ListenerManager.remove(this);
 		segmentDataCarrier.shutdownConsumers();
 		if (carrier != null){

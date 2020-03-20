@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Author: shushenglin
@@ -18,7 +19,7 @@ public class MappedFile implements Closeable {
 	private File file;
 	private RandomAccessFile raFile;
 	private FileChannel fc;
-	private MappedByteBuffer mappedByteBuffer;
+	private volatile MappedByteBuffer mappedByteBuffer;
 	private final int fileLimitLength;
 	private boolean newCreated = false;
 	private boolean writable = true;
@@ -118,13 +119,79 @@ public class MappedFile implements Closeable {
 		return true;
 	}
 
+	public static class PageFlushService extends FlushService{
+		public static final int OS_PAGE_SIZE = 1024 * 4;
+		
+		private final AtomicInteger writerPosition;
+		private AtomicInteger flushedPosition = new AtomicInteger();
+		private volatile boolean full = false;
+		private int flushLeastPage = 1;
+
+		public PageFlushService(MappedFile file, AtomicInteger writerPosition) {
+			super(file);
+			this.writerPosition = writerPosition;
+			this.flushedPosition.set(writerPosition.get());
+			String syncPagesStr = System.getProperty("FQueue.sync_pages", "4");
+			flushLeastPage = Integer.parseInt(syncPagesStr);
+		}
+
+		@Override
+		protected void doFlush() {
+			if (isAbleToFlush(flushLeastPage)) {
+				int writePos = writerPosition.get();
+				logger.debug("flushing, flushed {} written {}", flushedPosition.get(), writePos);
+				file.force();
+				flushedPosition.set(writePos);
+			}else{
+				logger.debug("not able to flush, flushed {} written {}", flushedPosition.get(), writerPosition.get());
+			}
+		}
+
+		public int getFlushLeastPage() {
+			return flushLeastPage;
+		}
+
+		public void setFlushLeastPage(int flushLeastPage) {
+			this.flushLeastPage = flushLeastPage;
+		}
+
+		public boolean isFull() {
+			return full;
+		}
+
+		public void setFull(boolean full) {
+			this.full = full;
+		}
+
+		private boolean isAbleToFlush(final int flushLeastPages) {
+			int flush = this.flushedPosition.get();
+			int write = writerPosition.get();
+
+			if (this.isFull()) {
+				return true;
+			}
+
+			if (flushLeastPages > 0) {
+				return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
+			}
+
+			return write > flush;
+		}
+
+		@Override
+		public String getServiceName() {
+			return "PagedFlushService";
+		}
+	}
+
 	public static class FlushService extends ServiceThread {
+		private int flushInterval = 500;
+
+		protected final MappedFile file;
+
 		public FlushService(MappedFile file) {
 			this.file = file;
 		}
-
-		private int flushInterval = 500;
-		private final MappedFile file;
 
 		public int getFlushInterval() {
 			return flushInterval;
@@ -141,21 +208,27 @@ public class MappedFile implements Closeable {
 
 		@Override
 		public void run() {
-			logger.info("flush service for mapped file {} start", file.getFile().getName());
+			String fileName = file.getFile().getName();
+			logger.info("flush service for mapped file {} start", fileName);
 			while (!this.isStopped()) {
 				try {
 					this.waitForRunning(flushInterval);
+					logger.debug("try flush file {}", fileName);
 					long begin = System.currentTimeMillis();
-					file.force();
+					doFlush();
 					long past = System.currentTimeMillis() - begin;
 					if (past > 500) {
-						logger.info("Flush file {} data to disk costs {} ms",file.getFile().getName(), past);
+						logger.info("Flush file {} data to disk costs {} ms", fileName, past);
 					}
 				} catch (Throwable t) {
-					logger.error("service {} flush data with exception for file {}", getServiceName(), file.getFile().getName(), t);
+					logger.error("service {} flush data with exception for file {}", getServiceName(), fileName, t);
 				}
 			}
-			logger.info("flush service for mapped file {} end", file.getFile().getName());
+			logger.info("flush service for mapped file {} end", fileName);
+		}
+
+		protected void doFlush() {
+			file.force();
 		}
 	}
 
@@ -170,11 +243,11 @@ public class MappedFile implements Closeable {
 
 		@Override
 		public void run() {
-//			logger.debug("run sync task for {}", file.getFile().getName());
+			logger.debug("run sync task for {}", file.getFile().getName());
 			if (file != null) {
 				try {
 					file.force();
-//					logger.debug("sync finish {}", file.getFile().getName());
+					logger.debug("sync finish {}", file.getFile().getName());
 				} catch (Exception e) {
 					logger.error("force file {} error", file.getFile(), e);
 				}

@@ -38,28 +38,50 @@ public class DataCarrier<T> {
     private Channels<T> channels;
     private IDriver driver;
     private String name;
+    private int consumeCycle = 20;
 
     public DataCarrier(int channelSize, int bufferSize) {
         this("DEFAULT", channelSize, bufferSize);
     }
 
     public DataCarrier(String name, int channelSize, int bufferSize) {
-        this(name, name, channelSize, bufferSize);
+        this(name, name, channelSize, bufferSize, true);
     }
 
-    public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize) {
+	public DataCarrier(int channelSize, int bufferSize, boolean blockStrategy) {
+		this("DEFAULT", "DEFAULT", channelSize, bufferSize, blockStrategy);
+	}
+
+	public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize){
+		this(name, envPrefix, channelSize, bufferSize, true);
+	}
+
+    public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize, boolean blockStrategy) {
         this.name = name;
         bufferSize = EnvUtil.getInt(envPrefix + "_BUFFER_SIZE", bufferSize);
         channelSize = EnvUtil.getInt(envPrefix + "_CHANNEL_SIZE", channelSize);
-        channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), BufferStrategy.BLOCKING);
+		BufferStrategy strategy = BufferStrategy.IF_POSSIBLE;
+		if (blockStrategy) {
+			strategy = BufferStrategy.BLOCKING;
+		}
+		channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), strategy);
     }
 
-	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler, int logSize) {
+	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler, String dbPath, int batchSize, int logSize) {
 		this.name = name;
-		this.channels = new FQueueChannels<T>(codec, scheduler, logSize);
+		this.channels = new FQueueChannels<T>(codec, scheduler,dbPath, batchSize, logSize);
 	}
 
-    /**
+	public int getConsumeCycle() {
+		return consumeCycle;
+	}
+
+	public DataCarrier<T> setConsumeCycle(int consumeCycle) {
+		this.consumeCycle = consumeCycle;
+		return this;
+	}
+
+	/**
      * set a new IDataPartitioner. It will cover the current one or default one.(Default is {@link
      * SimpleRollingPartitioner}
      *
@@ -120,7 +142,7 @@ public class DataCarrier<T> {
      * @param num number of consumer threads
      */
     public DataCarrier consume(Class<? extends IConsumer<T>> consumerClass, int num) {
-        return this.consume(consumerClass, num, 20);
+        return this.consume(consumerClass, num, consumeCycle);
     }
 
     /**
@@ -148,7 +170,7 @@ public class DataCarrier<T> {
      * @return
      */
     public DataCarrier consume(IConsumer<T> consumer, int num) {
-        return this.consume(consumer, num, 20);
+        return this.consume(consumer, num, consumeCycle);
     }
 
     /**

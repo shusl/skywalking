@@ -17,21 +17,13 @@ package com.google.code.fqueue.log;
 
 import com.google.code.fqueue.exception.FileEOFException;
 import com.google.code.fqueue.exception.FileFormatException;
-import com.google.code.fqueue.util.MappedByteBufferUtil;
 import com.google.code.fqueue.util.MappedFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileChannel.MapMode;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  *@author sunli
@@ -46,7 +38,7 @@ public class LogEntity {
 	public static final String MAGIC = "FQueuefs";
 	public static int messageStartPosition = 20;
 	private MappedFile mappedFile;
-	private MappedFile.FlushService flushService;
+	private MappedFile.PageFlushService flushService;
 
 	public MappedByteBuffer mappedByteBuffer;
 	private int fileLimitLength = 1024 * 1024 * 40;
@@ -58,7 +50,7 @@ public class LogEntity {
 	private String magicString = null;
 	private int version = -1;
 	private int readerPosition = -1;
-	private int writerPosition = -1;
+	private AtomicInteger writerPosition = new AtomicInteger(-1);
 	private int nextFile = -1;
 	private int endPosition = -1;
 	private int currentFileNumber = -1;
@@ -69,8 +61,7 @@ public class LogEntity {
 		this.fileLimitLength = fileLimitLength;
 		this.db = db;
 		mappedFile = new MappedFile(path, fileLimitLength);
-		flushService = new MappedFile.FlushService(mappedFile);
-		flushService.start();
+
 		// 文件不存在，创建文件
 		if (mappedFile.isNewCreated()) {
 			createLogEntity();
@@ -94,16 +85,15 @@ public class LogEntity {
 			endPosition = mappedByteBuffer.getInt();
 			// 未写满
 			if (endPosition == -1) {
-				this.writerPosition = db.getWriterPosition();
+				this.writerPosition.set(db.getWriterPosition()); ;
 			} else if (endPosition == -2) {// 预分配的文件
-				this.writerPosition = LogEntity.messageStartPosition;
-				db.putWriterPosition(this.writerPosition);
+				this.writerPosition.set(LogEntity.messageStartPosition);
+				db.putWriterPosition(getWritePosition());
 				mappedByteBuffer.position(16);
 				mappedByteBuffer.putInt(-1);
 				this.endPosition = -1;
-
 			} else {
-				this.writerPosition = endPosition;
+				this.writerPosition.set(endPosition);
 			}
 			if (db.getReaderIndex() == this.currentFileNumber) {
 				this.readerPosition = db.getReaderPosition();
@@ -111,6 +101,8 @@ public class LogEntity {
 				this.readerPosition = LogEntity.messageStartPosition;
 			}
 		}
+		flushService = new MappedFile.PageFlushService(mappedFile, writerPosition);
+		flushService.start();
 	}
 
 	public int getCurrentFileNumber() {
@@ -129,9 +121,9 @@ public class LogEntity {
 		mappedByteBuffer.putInt(endPosition);// 16
 		mappedByteBuffer.force();
 		this.magicString = MAGIC;
-		this.writerPosition = LogEntity.messageStartPosition;
+		this.writerPosition.set(LogEntity.messageStartPosition);
 		this.readerPosition = LogEntity.messageStartPosition;
-		db.putWriterPosition(this.writerPosition);
+		db.putWriterPosition(getWritePosition());
 		return true;
 	}
 
@@ -162,26 +154,31 @@ public class LogEntity {
 
 	public boolean isFull(int increment) {
 		// confirm if the file is full
-		if (this.fileLimitLength < this.writerPosition + increment) {
+		if (this.fileLimitLength < getWritePosition() + increment) {
 			return true;
 		}
 		return false;
+	}
+
+	private int getWritePosition() {
+		return this.writerPosition.get();
 	}
 
 	public byte write(byte[] log, int offset, int length){
 		int increment = length + 4;
 		if (isFull(increment)) {
 			mappedByteBuffer.position(16);
-			mappedByteBuffer.putInt(this.writerPosition);
-			this.endPosition = this.writerPosition;
+			mappedByteBuffer.putInt(getWritePosition());
+			this.endPosition = this.getWritePosition();
+			flushService.setFull(true);
 			flushService.wakeup();
 			return WRITE_FULL;
 		}
-		mappedByteBuffer.position(this.writerPosition);
+		mappedByteBuffer.position(this.getWritePosition());
 		mappedByteBuffer.putInt(length);
 		mappedByteBuffer.put(log, offset, length);
-		this.writerPosition += increment;
-		putWriterPosition(this.writerPosition);
+		int pos = this.writerPosition.addAndGet(increment);
+		putWriterPosition(pos);
 		flushService.wakeup();
 		return WRITE_SUCCESS;
 	}
@@ -195,7 +192,7 @@ public class LogEntity {
 			throw new FileEOFException("file eof");
 		}
 		// readerPosition must be less than writerPosition
-		if (this.readerPosition >= this.writerPosition) {
+		if (this.readerPosition >= this.getWritePosition()) {
 			return null;
 		}
 		mappedByteBuffer.position(this.readerPosition);
@@ -214,14 +211,13 @@ public class LogEntity {
 			throw new FileEOFException("file eof");
 		}
 		// readerPosition must be less than writerPosition
-		if (this.readerPosition >= this.writerPosition) {
+		if (this.readerPosition >= this.getWritePosition()) {
 			return false;
 		}
 		mappedByteBuffer.position(this.readerPosition);
 		int length = mappedByteBuffer.getInt();
 		this.readerPosition += length + 4;
 		putReaderPosition(this.readerPosition);
-		flushService.wakeup();
 		return true;
 	}
 
@@ -230,7 +226,7 @@ public class LogEntity {
 			throw new FileEOFException("file eof");
 		}
 		// readerPosition must be less than writerPosition
-		if (this.readerPosition >= this.writerPosition) {
+		if (this.readerPosition >= this.getWritePosition()) {
 			return null;
 		}
 		mappedByteBuffer.position(this.readerPosition);
@@ -248,6 +244,7 @@ public class LogEntity {
 
 	public void close() {
 		try {
+			flushService.makeStop();
 		    mappedFile.close();
 		    flushService.shutdown();
 		} catch (Exception e) {

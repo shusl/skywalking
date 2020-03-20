@@ -235,6 +235,7 @@ public class FSQueue {
 	}
 
 	public void close() {
+		log.debug("close fsQueue with path {}", path);
 		db.close();
 		readerHandle.close();
 		writerHandle.close();
