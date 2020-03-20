@@ -34,6 +34,7 @@ import org.apache.skywalking.apm.commons.datacarrier.DataCarrier;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.IConsumer;
 import org.apache.skywalking.apm.network.common.Commands;
 import org.apache.skywalking.apm.network.language.agent.UpstreamSegment;
+import org.apache.skywalking.apm.network.language.agent.UpstreamSegmentList;
 import org.apache.skywalking.apm.network.language.agent.v2.SegmentObject;
 import org.apache.skywalking.apm.network.language.agent.v2.TraceSegmentReportServiceGrpc;
 
@@ -53,11 +54,13 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     private long lastLogTime;
     private long segmentUplinkedCounter;
     private long segmentAbandonedCounter;
-    private volatile DataCarrier<UpstreamSegment> carrier;
+    private DataCarrier<UpstreamSegment> carrier;
+    private DataCarrier<UpstreamSegmentList> listCarrier;
     private DataCarrier<TraceSegment> segmentDataCarrier;
     private volatile TraceSegmentReportServiceGrpc.TraceSegmentReportServiceStub serviceStub;
     private volatile GRPCChannelStatus status = GRPCChannelStatus.DISCONNECT;
 	private ScheduledExecutorService scheduler;
+	private List<UpstreamSegment> upstreamSegments;
 
 	@Override
     public void prepare() {
@@ -89,28 +92,34 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 
 	private void initWithFQueue() {
 		scheduler = new ScheduledThreadPoolExecutor(Config.FQueue.THREADS);
-		carrier = new DataCarrier<UpstreamSegment>("FQueue",new UpstreamSegmentCodec(), scheduler,
-				Config.FQueue.DB_PATH, Config.FQueue.BATCH_SIZE, Config.FQueue.LOG_SIZE);
-		carrier.consume(this, 1, Config.FQueue.CONSUMER_CYCLE);
+		if (Config.FQueue.PACK_SEGMENTS) {
+			logger.info("init fQueue carrier with pack segments");
+			listCarrier = new DataCarrier<UpstreamSegmentList>("FQueue", new UpstreamSegmentsCodec(), scheduler,
+					Config.FQueue.DB_PATH, Config.FQueue.PACKED_BATCH_SIZE, Config.FQueue.LOG_SIZE);
+			listCarrier.consume(new AbstractConsumer<UpstreamSegmentList>() {
+				@Override
+				public void consume(List<UpstreamSegmentList> data) {
+					consumeUpstreamSegments(data);
+				}
+			}, 1, Config.FQueue.CONSUMER_CYCLE);
+		}else {
+			carrier = new DataCarrier<UpstreamSegment>("FQueue", new UpstreamSegmentCodec(), scheduler,
+					Config.FQueue.DB_PATH, Config.FQueue.BATCH_SIZE, Config.FQueue.LOG_SIZE);
+			carrier.consume(this, 1, Config.FQueue.CONSUMER_CYCLE);
+		}
 		logger.info("init data carrier with buffer size {}", BUFFER_SIZE);
 		segmentDataCarrier = new DataCarrier<TraceSegment>(CHANNEL_SIZE, BUFFER_SIZE, BLOCK_STRATEGY);
 		segmentDataCarrier.consume(new AbstractConsumer<TraceSegment>() {
 			@Override
 			public void consume(List<TraceSegment> data) {
-				if (data == null || data.isEmpty()) {
-					return;
-				}
-
 				try {
-					if (PACK_UPSTREAM) {
-						UpstreamSegment.Builder upstreamBuilder = UpstreamSegment.newBuilder();
-						SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
+					if (Config.FQueue.PACK_SEGMENTS) {
+						UpstreamSegmentList.Builder builder = UpstreamSegmentList.newBuilder();
 						for (TraceSegment segment : data) {
-							segment.appendTraceSegment(upstreamBuilder, traceSegmentBuilder);
+							UpstreamSegment upstreamSegment = segment.transform();
+							builder.addSegments(upstreamSegment);
 						}
-						upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
-						UpstreamSegment upstreamSegment = upstreamBuilder.build();
-						carrier.produce(upstreamSegment);
+						listCarrier.produce(builder.build());
 					}else{
 						for (TraceSegment segment : data) {
 							UpstreamSegment upstreamSegment = segment.transform();
@@ -137,6 +146,9 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
 		if (carrier != null){
 			carrier.shutdownConsumers();
 		}
+		if (listCarrier != null) {
+			listCarrier.shutdownConsumers();
+		}
 		if (scheduler != null) {
 			scheduler.shutdown();
 		}
@@ -150,6 +162,24 @@ public class UpstreamSegmentServiceClient implements BootService, IConsumer<Upst
     @Override
     public void consume(List<UpstreamSegment> data) {
 		consumeUpstreamSegment(data);
+	}
+
+	private void consumeUpstreamSegments(List<UpstreamSegmentList> data) {
+		if (upstreamSegments == null){
+			int totalSize = 0;
+			for (UpstreamSegmentList list : data) {
+				totalSize += list.getSegmentsCount();
+			}
+			upstreamSegments = new ArrayList<UpstreamSegment>(totalSize);
+		}
+		for (UpstreamSegmentList segmentList : data) {
+			upstreamSegments.addAll(segmentList.getSegmentsList());
+		}
+		try{
+			consumeUpstreamSegment(upstreamSegments);
+		}finally {
+			upstreamSegments.clear();
+		}
 	}
 
 	private void consumeTraceSegment(List<TraceSegment> data){

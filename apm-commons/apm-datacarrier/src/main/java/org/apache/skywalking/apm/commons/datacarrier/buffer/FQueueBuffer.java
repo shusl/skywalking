@@ -59,14 +59,15 @@ public class FQueueBuffer<T> implements QueueBuffer<T> {
 		if (fQueue == null) {
 			return;
 		}
-		maxBatchSize = EnvUtil.getInt("FQueue.batch.size", maxBatchSize);
 		for (int i =0; i< maxBatchSize; ++i) {
 			byte[] bytes = fQueue.poll();
 			if (bytes == null) {
 				break;
 			}
 			T obj = codec.decode(bytes);
-			consumeList.add(obj);
+			if (obj != null){
+				consumeList.add(obj);
+			}
 		}
 	}
 

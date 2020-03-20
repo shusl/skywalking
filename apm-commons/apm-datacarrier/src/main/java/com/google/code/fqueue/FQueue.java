@@ -67,7 +67,6 @@ public class FQueue extends AbstractQueue<byte[]> implements Queue<byte[]>,
 			if (closed) {
 				return false;
 			}
-			log.debug("offer data with offset {} length {}", offset, length);
 			fsQueue.add(e, offset, length);
 			return true;
 		} catch (IOException e1) {

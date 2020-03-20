@@ -156,7 +156,14 @@ public class Config {
     	
 		public static String DB_PATH = "./db";
 
-		public static int BATCH_SIZE = 50000;
+		public static int BATCH_SIZE = 20000;
+
+		public static boolean PACK_SEGMENTS = false;
+
+		public static int PACKED_BATCH_SIZE = 1;
+
+		public static int PACK_WRITE_BATCH_SIZE = 5000;
+
 		/**
 		 * log rotate size
 		 */
@@ -180,9 +187,7 @@ public class Config {
 
         public static boolean BLOCK_STRATEGY  = false;
 
-		public static boolean PACK_UPSTREAM = true;
-
-		public static int CONSUMER_CYCLE = 200;
+		public static int CONSUMER_CYCLE = 20;
     }
 
     public static class Dictionary {

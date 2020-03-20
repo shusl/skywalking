@@ -162,20 +162,16 @@ public class TraceSegment {
      * @return the segment as GRPC service parameter
      */
     public UpstreamSegment transform() {
-        UpstreamSegment.Builder upstreamBuilder = UpstreamSegment.newBuilder();
-		SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
-
-		appendTraceSegment(upstreamBuilder, traceSegmentBuilder);
-
-		upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
-        return upstreamBuilder.build();
+		UpstreamSegment.Builder upstreamBuilder = transformToBuilder();
+		return upstreamBuilder.build();
     }
 
-	public void appendTraceSegment(UpstreamSegment.Builder upstreamBuilder, SegmentObject.Builder traceSegmentBuilder) {
+	public UpstreamSegment.Builder transformToBuilder() {
+		UpstreamSegment.Builder upstreamBuilder = UpstreamSegment.newBuilder();
 		for (DistributedTraceId distributedTraceId : getRelatedGlobalTraces()) {
 			upstreamBuilder = upstreamBuilder.addGlobalTraceIds(distributedTraceId.toUniqueId());
 		}
-
+		SegmentObject.Builder traceSegmentBuilder = SegmentObject.newBuilder();
 		/**
 		 * Trace Segment
 		 */
@@ -189,6 +185,9 @@ public class TraceSegment {
 		traceSegmentBuilder.setServiceId(RemoteDownstreamConfig.Agent.SERVICE_ID);
 		traceSegmentBuilder.setServiceInstanceId(RemoteDownstreamConfig.Agent.SERVICE_INSTANCE_ID);
 		traceSegmentBuilder.setIsSizeLimited(this.isSizeLimited);
+
+		upstreamBuilder.setSegment(traceSegmentBuilder.build().toByteString());
+		return upstreamBuilder;
 	}
 
 	@Override
