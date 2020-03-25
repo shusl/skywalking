@@ -17,19 +17,18 @@
   ~
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.apache.skywalking</groupId>
     <artifactId>apm</artifactId>
-    <version>7.0.0-SNAPSHOT</version>
+    <version>7.1.0-SNAPSHOT</version>
 
     <parent>
         <groupId>org.apache</groupId>
         <artifactId>apache</artifactId>
         <version>21</version>
-        <relativePath/>
+        <relativePath />
     </parent>
 
     <modules>
@@ -195,7 +194,7 @@
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <com.google.protobuf.protoc.version>3.3.0</com.google.protobuf.protoc.version>
         <protoc-gen-grpc-java.plugin.version>1.8.0</protoc-gen-grpc-java.plugin.version>
-        <netty-tcnative-boringssl-static.version>2.0.25.Final</netty-tcnative-boringssl-static.version>
+        <netty-tcnative-boringssl-static.version>2.0.26.Final</netty-tcnative-boringssl-static.version>
 
         <!-- Plugin versions -->
         <docker.plugin.version>0.4.13</docker.plugin.version>
@@ -386,6 +385,22 @@
                 <artifactId>apache-rat-plugin</artifactId>
                 <version>${apache-rat-plugin.version}</version>
                 <configuration>
+                    <excludeSubProjects>false</excludeSubProjects>
+                    <addDefaultLicenseMatchers>false</addDefaultLicenseMatchers>
+                    <licenses>
+                        <license implementation="org.apache.rat.analysis.license.SimplePatternBasedLicense">
+                            <licenseFamilyCategory>AL20</licenseFamilyCategory>
+                            <licenseFamilyName>Apache License, 2.0</licenseFamilyName>
+                            <patterns>
+                                <pattern>Licensed to the Apache Software Foundation (ASF)</pattern>
+                            </patterns>
+                        </license>
+                    </licenses>
+                    <licenseFamilies>
+                        <licenseFamily implementation="org.apache.rat.license.SimpleLicenseFamily">
+                            <familyName>Apache License, 2.0</familyName>
+                        </licenseFamily>
+                    </licenseFamilies>
                     <excludes>
                         <exclude>**/target/**</exclude>
                         <exclude>**/licenses/**</exclude>
@@ -447,6 +462,7 @@
                         <exclude>**/src/main/proto/google/**</exclude>
                         <exclude>**/src/main/proto/istio/**</exclude>
                         <exclude>**/src/main/proto/jaeger/**</exclude>
+                        <exclude>**/src/main/proto/mixer/**</exclude>
                         <exclude>**/src/main/proto/policy/**</exclude>
                         <exclude>**/src/main/proto/prometheus/client_model/metrics.proto</exclude>
                         <exclude>**/src/main/proto/protoc-gen-swagger/**</exclude>
@@ -457,12 +473,16 @@
                         <exclude>**/src/main/resources/code-templates/*/*.ftl</exclude>
 
                         <!-- Maven Wrapper generated files -->
-                        <exclude>.mvn/wrapper/maven-wrapper.properties</exclude>
+                        <exclude>.mvn/wrapper/**</exclude>
                         <exclude>tools/dependencies/known-oap-backend-dependencies.txt</exclude>
                         <exclude>apm-checkstyle/CHECKSTYLE_HEAD</exclude>
 
                         <!-- generated file from test agent plugin scenarios -->
                         <exclude>**/test/plugin/workspace/**</exclude>
+
+                        <!-- TSL relevant files for e2e test -->
+                        <exclude>**/*.crt</exclude>
+                        <exclude>**/*.pem</exclude>
 
                         <exclude>.m2/**</exclude>
                     </excludes>
@@ -557,6 +577,9 @@
                         org/apache/skywalking/oap/server/exporter/grpc/*.java,
                         org/apache/skywalking/oap/server/configuration/service/*.java
                     </excludes>
+                    <propertyExpansion>
+                        import.control=apm-checkstyle/importControl.xml
+                    </propertyExpansion>
                 </configuration>
                 <executions>
                     <execution>
@@ -573,7 +596,7 @@
                 <artifactId>cobertura-maven-plugin</artifactId>
                 <version>${cobertura-maven-plugin.version}</version>
                 <configuration>
-                    <check/>
+                    <check />
                     <aggregate>true</aggregate>
                     <encoding>${project.build.sourceEncoding}</encoding>
                     <quiet>true</quiet>

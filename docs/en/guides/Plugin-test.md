@@ -1,11 +1,11 @@
 # Plugin automatic test framework
 
-Plugin test frameworks is designed for verifying the plugin function and compatible status. As there are dozens of plugins and
-hundreds versions need to be verified, it is impossible to do manually.
+Plugin test framework is designed for verifying the plugins' function and compatible status. As there are dozens of plugins and
+hundreds of versions need to be verified, it is impossible to do manually.
 The test framework uses container based tech stack, requires a set of real services with agent installed, then the test mock
-OAP backend is running to check the segment and register data sent from agents.
+OAP backend is running to check the segments and register data sent from agents.
 
-Every plugin maintained in the main repo is required having its test cases, also matching the versions in the supported list doc. 
+Every plugin maintained in the main repo requires corresponding test cases, also matching the versions in the supported list doc.
 
 ## Environment Requirements
 
@@ -214,30 +214,30 @@ as the version number, it will be changed in the test for every version.
 **Register verify description format**
 ```yml
 registryItems:
-  applications:
-  - APPLICATION_CODE: APPLICATION_ID(int)
+  services:
+  - { SERVICE_NAME: SERVICE_ID(int) }
   ...
   instances:
-  - APPLICATION_CODE: INSTANCE_COUNT(int)
+  - { SERVICE_CODE: INSTANCE_COUNT(int) }
   ...
   operationNames:
-  - APPLICATION_CODE: [ SPAN_OPERATION(string), ... ]
+  - SERVICE_CODE: [ ENTRY_SPAN_OPERATION(string), ... ]
   ...
 ```
 
 
 | Field | Description
 | --- | ---
-| applications | The registered service codes. Normally, not 0 should be enough.
+| services | The registered service codes. Normally, not 0 should be enough.
 | instances | The number of service instances exists in this test case.
-| operationNames | All endpoint registered in this test case. Also means, the operation names of all entry spans.
+| operationNames | Operation names of entry spans. Since 6.6.0, only these span name would do register, due to they are real endpoints.
 
 
 **Segment verify description format**
 ```yml
 segments:
 -
-  applicationCode: APPLICATION_CODE(string)
+  serviceName: SERVICE_CODE(string)
   segmentSize: SEGMENT_SIZE(int)
   segments:
   - segmentId: SEGMENT_ID(string)
@@ -248,7 +248,7 @@ segments:
 
 | Field |  Description
 | --- | ---  
-| applicationCode | Service code.
+| serviceName | Service code.
 | segmentSize | The number of segments is expected.
 | segmentId | trace ID.
 | spans | segment span list. Follow the next section to see how to describe every span.
@@ -281,10 +281,14 @@ segments:
     - {
        parentSpanId: PARENT_SPAN_ID(int),
        parentTraceSegmentId: PARENT_TRACE_SEGMENT_ID(string),
-       entryServiceName: ENTRY_SERVICE_NAME(string),
+       entryServiceInstanceId: ENTRY_SERVICE_INSTANCE_ID(int)
+       parentServiceInstanceId: PARENT_SERVICE_INSTANCE_ID(int),
        networkAddress: NETWORK_ADDRESS(string),
-       parentServiceName: PARENT_SERVICE_NAME(string),
-       entryApplicationInstanceId: ENTRY_APPLICATION_INSTANCE_ID(int)
+       networkAddressId: NETWORK_ADDRESS_ID(int),
+       parentEndpoint: PARENT_ENDPOINT_NAME(string),
+       parentEndpointId: PARENT_ENDPOINT_ID(int),
+       entryEndpoint: ENTRY_ENDPOINT_NAME(string),
+       entryServiceInstanceId: ENTRY_ENDPOINT_ID(int),
      }
    ...
 ```
@@ -313,12 +317,10 @@ The verify description for SegmentRef,
 | Field | Description 
 |---- |---- 
 | parentSpanId | Parent SpanID, pointing to the span id in the parent segment.
-| parentTraceSegmentId | Parent SegmentID. Format is `${APPLICATION_CODE[SEGMENT_INDEX]}`, pointing to the index of parent service segment list. 
-| entryServiceName | Entrance service code of the whole distributed call chain. Such HttpClient entryServiceName is `/httpclient-case/case/httpclient` 
-| networkAddress | The peer value of parent exit span. 
-| parentServiceName | Parent service code.
-| entryApplicationInstanceId | Not 0 should be enough.
-
+| entryServiceInstanceId/parentServiceInstanceId | Not 0 should be enough
+| networkAddress/networkAddressId | The peer value of parent exit span. `networkAddressId` should be 0, as the mock tool doesn't do register for real.
+| parentEndpoint/parentEndpointId | The endpoint of parent/downstream service. Usually set `parentEndpoint` as literal string name, unless there is no parent endpoint, set `parentEndpointId` as -1.
+| entryEndpoint/entryServiceInstanceId | The endpoint of first service in the distributed chain. Usually set `entryEndpoint` as literal string name, unless there is no endpoint at the entry service, set `entryServiceInstanceId` as -1.
 
 ### startup.sh
 
@@ -446,7 +448,7 @@ HttpClient test case is running in Tomcat container, only one instance exists, s
 
 ```yml
 registryItems:
-  applications:
+  services:
   - {httpclient-case: nq 0}
   instances:
   - {httpclient-case: 1}
@@ -462,7 +464,7 @@ By following the flow of HttpClient case, there should be two segments created.
 
 ```yml
 segments:
-  - applicationCode: httpclient-case
+  - serviceName: httpclient-case
     segmentSize: ge 2 # Could have more than one health check segments, because, the dependency is not standby.
 ```
 
@@ -557,41 +559,23 @@ rather than recompiling it every time.
 
 Use `${SKYWALKING_HOME}/test/plugin/run.sh -h` to know more command options.
 
-If the local test passed, then you could add it to `.github/workflows/plugins-test.yaml` file, which will drive the tests running on the Github Action of official SkyWalking repository. Please check the prev agent related PRs, and add your case to the fastest group, in order to make the whole test finished as soon as possible.
+If the local test passed, then you could add it to `.github/workflows/plugins-test.<n>.yaml` file, which will drive the tests running on the Github Actions of official SkyWalking repository.
+Based on your plugin's name, please add the test case into file `.github/workflows/plugins-test.<n>.yaml`, by alphabetical orders.
 
-Every test case is a Github Action Step. Please use the scenario name, version range and version number to combine the name,
-take the existing one as a reference. 
+Every test case is a Github Actions Job. Please use the `<scenario name> + <version range> + (<supported version count>)` as the Job `title`, and the scenario directory as the Job `name`,
+mostly you'll just need to decide which file (`plugins-test.<n>.yaml`) to add your test case, and simply put one line (as follows) in it, take the existed cases as examples.
 
-For example:
-
-Here is a group named 'Kafka'. The latest step is Kafka scenario.
-```
-  Kafka:
+```yaml
+jobs:
+  PluginsTest:
+    name: Plugin
     runs-on: ubuntu-18.04
     timeout-minutes: 90
     strategy:
       fail-fast: true
-    steps:
-      - uses: actions/checkout@v2
-      # In the checkout@v2, it doesn't support git submodule. Execute the commands manually.
-      - name: checkout submodules
-        shell: bash
-        run: |
-          git submodule sync --recursive
-          git -c protocol.version=2 submodule update --init --force --recursive --depth=1
-      - uses: actions/cache@v1
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      - uses: actions/setup-java@v1
-        with:
-          java-version: 8
-      - name: Build SkyWalking Agent
-        run: ./mvnw clean package -DskipTests -Pagent >/dev/null
-      - name: Build the Docker image
-        run: ./mvnw -f test/plugin/pom.xml clean package -DskipTests docker:build -DBUILD_NO=local >/dev/null
-      - name: Run kafka 0.11.0.0-2.3.0 (16)
-        run: bash test/plugin/run.sh kafka-scenario
+      matrix:
+        case:
+          # ...
+          - { name: '<your case name>', title: '<PluginName, i.e. Spring> (<Supported Version Count, i.e 12>)' } # <<== insert one line by alphabetical orders
+          # ...
 ```

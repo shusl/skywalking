@@ -212,9 +212,6 @@ public abstract class AbstractTracingSpan implements AbstractSpan {
     public AbstractTracingSpan setOperationName(String operationName) {
         this.operationName = operationName;
         this.operationId = DictionaryUtil.nullValue();
-
-        // recheck profiling status
-        owner.profilingRecheck(this, operationName);
         return this;
     }
 
@@ -360,5 +357,10 @@ public abstract class AbstractTracingSpan implements AbstractSpan {
         owner.asyncStop(this);
         isAsyncStopped = true;
         return this;
+    }
+
+    @Override
+    public boolean isProfiling() {
+        return this.owner.profileStatus().isProfiling();
     }
 }

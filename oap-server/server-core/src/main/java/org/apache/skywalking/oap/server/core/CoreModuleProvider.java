@@ -19,6 +19,7 @@
 package org.apache.skywalking.oap.server.core;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import org.apache.skywalking.oap.server.configuration.api.ConfigurationModule;
 import org.apache.skywalking.oap.server.configuration.api.DynamicConfigurationService;
 import org.apache.skywalking.oap.server.core.analysis.ApdexThresholdConfig;
@@ -138,6 +139,10 @@ public class CoreModuleProvider extends ModuleProvider {
 
     @Override
     public void prepare() throws ServiceNotProvidedException, ModuleStartException {
+        if (moduleConfig.isActiveExtraModelColumns()) {
+            DefaultScopeDefine.activeExtraModelColumns();
+        }
+
         StreamAnnotationListener streamAnnotationListener = new StreamAnnotationListener(getManager());
 
         AnnotationScan scopeScan = new AnnotationScan();
@@ -162,7 +167,13 @@ public class CoreModuleProvider extends ModuleProvider {
             throw new ModuleStartException(e.getMessage(), e);
         }
 
-        grpcServer = new GRPCServer(moduleConfig.getGRPCHost(), moduleConfig.getGRPCPort());
+        if (moduleConfig.isGRPCSslEnabled()) {
+            grpcServer = new GRPCServer(moduleConfig.getGRPCHost(), moduleConfig.getGRPCPort(),
+                                        Paths.get(moduleConfig.getGRPCSslCertChainPath()).toFile(),
+                                        Paths.get(moduleConfig.getGRPCSslKeyPath()).toFile());
+        } else {
+            grpcServer = new GRPCServer(moduleConfig.getGRPCHost(), moduleConfig.getGRPCPort());
+        }
         if (moduleConfig.getMaxConcurrentCallsPerConnection() > 0) {
             grpcServer.setMaxConcurrentCallsPerConnection(moduleConfig.getMaxConcurrentCallsPerConnection());
         }
@@ -241,7 +252,12 @@ public class CoreModuleProvider extends ModuleProvider {
 
         annotationScan.registerListener(streamAnnotationListener);
 
-        this.remoteClientManager = new RemoteClientManager(getManager(), moduleConfig.getRemoteTimeout());
+        if (moduleConfig.isGRPCSslEnabled()) {
+            this.remoteClientManager = new RemoteClientManager(getManager(), moduleConfig.getRemoteTimeout(),
+                                                               Paths.get(moduleConfig.getGRPCSslTrustedCAPath()).toFile());
+        } else {
+            this.remoteClientManager = new RemoteClientManager(getManager(), moduleConfig.getRemoteTimeout());
+        }
         this.registerServiceImplementation(RemoteClientManager.class, remoteClientManager);
 
         MetricsStreamProcessor.getInstance().setEnableDatabaseSession(moduleConfig.isEnableDatabaseSession());

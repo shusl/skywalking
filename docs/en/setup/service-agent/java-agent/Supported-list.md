@@ -17,7 +17,7 @@
   * [Netty SocketIO](https://github.com/mrniko/netty-socketio) 1.x
 * HTTP Client
   * [Feign](https://github.com/OpenFeign/feign) 9.x
-  * [Netflix Spring Cloud Feign](https://github.com/spring-cloud/spring-cloud-netflix/tree/master/spring-cloud-starter-feign) 1.1.x, 1.2.x, 1.3.x
+  * [Netflix Spring Cloud Feign](https://github.com/spring-cloud/spring-cloud-openfeign) 1.1.x -> 2.x
   * [Okhttp](https://github.com/square/okhttp) 3.x
   * [Apache httpcomponent HttpClient](http://hc.apache.org/) 2.0 -> 3.1, 4.2, 4.3
   * [Spring RestTemplete](https://github.com/spring-projects/spring-framework) 4.x
@@ -42,6 +42,7 @@
   * [SOFARPC](https://github.com/alipay/sofa-rpc) 5.4.0
   * [Armeria](https://github.com/line/armeria) 0.63.0 -> 0.98.0
   * [Apache Avro](http://avro.apache.org) 1.7.0 - 1.8.x
+  * [Finagle](https://github.com/twitter/finagle) 6.25.0 -> 20.1.0 
 * MQ
   * [RocketMQ](https://github.com/apache/rocketmq) 4.x
   * [Kafka](http://kafka.apache.org) 0.11.0.0 -> 1.0
