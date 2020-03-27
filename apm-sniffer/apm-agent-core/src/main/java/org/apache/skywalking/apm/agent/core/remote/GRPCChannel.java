@@ -23,6 +23,8 @@ import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
+import io.netty.channel.EventLoopGroup;
+
 import java.util.LinkedList;
 import java.util.List;
 
@@ -34,8 +36,8 @@ public class GRPCChannel {
     private final Channel channelWithDecorators;
 
     private GRPCChannel(String host, int port, List<ChannelBuilder> channelBuilders,
-        List<ChannelDecorator> decorators) throws Exception {
-        ManagedChannelBuilder channelBuilder = NettyChannelBuilder.forAddress(host, port);
+						List<ChannelDecorator> decorators, EventLoopGroup eventLoopGroup) throws Exception {
+        ManagedChannelBuilder channelBuilder = NettyChannelBuilder.forAddress(host, port).eventLoopGroup(eventLoopGroup);
 
         for (ChannelBuilder builder : channelBuilders) {
             channelBuilder = builder.build(channelBuilder);
@@ -84,6 +86,7 @@ public class GRPCChannel {
         private final int port;
         private final List<ChannelBuilder> channelBuilders;
         private final List<ChannelDecorator> decorators;
+        private EventLoopGroup eventLoopGroup;
 
         private Builder(String host, int port) {
             this.host = host;
@@ -92,13 +95,18 @@ public class GRPCChannel {
             this.decorators = new LinkedList<>();
         }
 
-        public Builder addChannelDecorator(ChannelDecorator interceptor) {
+		public Builder setEventLoopGroup(EventLoopGroup eventLoopGroup) {
+			this.eventLoopGroup = eventLoopGroup;
+			return this;
+		}
+
+		public Builder addChannelDecorator(ChannelDecorator interceptor) {
             this.decorators.add(interceptor);
             return this;
         }
 
         public GRPCChannel build() throws Exception {
-            return new GRPCChannel(host, port, channelBuilders, decorators);
+            return new GRPCChannel(host, port, channelBuilders, decorators, eventLoopGroup);
         }
 
         public Builder addManagedChannelBuilder(ChannelBuilder builder) {

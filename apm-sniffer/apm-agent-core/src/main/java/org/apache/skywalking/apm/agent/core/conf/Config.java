@@ -93,7 +93,7 @@ public class Config {
          * How long should the agent wait (in minute) before re-registering to the OAP server after receiving reset
          * command
          */
-        public static int COOL_DOWN_THRESHOLD = 10;
+        public static int COOL_DOWN_THRESHOLD = 1;
 
         /**
          * Force reconnection period of grpc, based on grpc_channel_check_interval. If count of check grpc channel
@@ -105,6 +105,11 @@ public class Config {
          * Limit the length of the operationName to prevent errors when inserting elasticsearch
          **/
         public static int OPERATION_NAME_THRESHOLD = 500;
+
+		/**
+		 * grpc netty threads
+		 */
+		public static int GRPC_EVENT_LOOP_THREADS = 4;
     }
 
     public static class Collector {
@@ -165,10 +170,42 @@ public class Config {
         public static int BUFFER_SIZE = 60 * 10;
     }
 
+    public static class FQueue{
+    	
+		public static String DB_PATH = "./db";
+
+		public static int BATCH_SIZE = 20000;
+
+		public static boolean PACK_SEGMENTS = false;
+
+		public static int PACKED_BATCH_SIZE = 1;
+
+		public static int PACK_WRITE_BATCH_SIZE = 5000;
+
+		/**
+		 * log rotate size
+		 */
+		public static int LOG_SIZE = 1024 * 1024 * 30;
+		/**
+		 * fqueue scheduler threads
+		 */
+    	public static int THREADS = 2;
+		/**
+		 * disable fqueue log
+		 */
+		public static boolean DISABLED = true;
+
+		public static int CONSUMER_CYCLE = 20;
+	}
+
     public static class Buffer {
         public static int CHANNEL_SIZE = 5;
 
-        public static int BUFFER_SIZE = 300;
+        public static int BUFFER_SIZE = 15000;
+
+        public static boolean BLOCK_STRATEGY  = false;
+
+		public static int CONSUMER_CYCLE = 20;
     }
 
     public static class Dictionary {

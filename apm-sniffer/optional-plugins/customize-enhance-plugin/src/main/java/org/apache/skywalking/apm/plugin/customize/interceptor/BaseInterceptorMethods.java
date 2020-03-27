@@ -69,7 +69,12 @@ class BaseInterceptorMethods {
                 }
                 operationName = operationNameSuffix.insert(0, operationName).toString();
 
-                AbstractSpan span = ContextManager.createLocalSpan(operationName);
+				AbstractSpan span;
+				if (MethodConfiguration.isEntryPointMethod(configuration)) {
+					span = ContextManager.createEntrySpan(operationName, null);
+				} else {
+					span = ContextManager.createLocalSpan(operationName);
+				}
                 if (!spanTags.isEmpty()) {
                     for (Map.Entry<String, String> tag : spanTags.entrySet()) {
                         span.tag(Tags.ofKey(tag.getKey()), tag.getValue());

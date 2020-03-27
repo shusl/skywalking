@@ -29,6 +29,10 @@ import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import org.apache.skywalking.apm.agent.core.boot.BootService;
 import org.apache.skywalking.apm.agent.core.boot.DefaultImplementor;
 import org.apache.skywalking.apm.agent.core.boot.DefaultNamedThreadFactory;
@@ -49,8 +53,9 @@ public class GRPCChannelManager implements BootService, Runnable {
     private volatile List<String> grpcServers;
     private volatile int selectedIdx = -1;
     private volatile int reconnectCount = 0;
+	private EventLoopGroup eventLoopGroup;
 
-    @Override
+	@Override
     public void prepare() {
 
     }
@@ -86,12 +91,15 @@ public class GRPCChannelManager implements BootService, Runnable {
         if (managedChannel != null) {
             managedChannel.shutdownNow();
         }
+		if (eventLoopGroup != null) {
+			eventLoopGroup.shutdownGracefully();
+		}
         logger.debug("Selected collector grpc service shutdown.");
     }
 
     @Override
     public void run() {
-        logger.debug("Selected collector grpc service running, reconnect:{}.", reconnect);
+        logger.debug("Selected collector grpc service running, reconnect:{}. event loop {}", reconnect, eventLoopGroup);
         if (reconnect) {
             if (grpcServers.size() > 0) {
                 String server = "";
@@ -106,8 +114,12 @@ public class GRPCChannelManager implements BootService, Runnable {
                         if (managedChannel != null) {
                             managedChannel.shutdownNow();
                         }
-
+						if (Config.Agent.GRPC_EVENT_LOOP_THREADS > 0 && eventLoopGroup == null) {
+							logger.debug("use custom grpc netty event loop, threads {}", Config.Agent.GRPC_EVENT_LOOP_THREADS);
+							eventLoopGroup = new NioEventLoopGroup(Config.Agent.GRPC_EVENT_LOOP_THREADS, new DefaultThreadFactory("SWGRpcClient"));
+						}
                         managedChannel = GRPCChannel.newBuilder(ipAndPort[0], Integer.parseInt(ipAndPort[1]))
+													.setEventLoopGroup(eventLoopGroup)
                                                     .addManagedChannelBuilder(new StandardChannelBuilder())
                                                     .addManagedChannelBuilder(new TLSChannelBuilder())
                                                     .addChannelDecorator(new AgentIDDecorator())

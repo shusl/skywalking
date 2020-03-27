@@ -157,6 +157,17 @@ public enum CustomizeConfiguration {
         } else {
             MethodConfiguration.setCloseAfterMethod(configuration, false);
         }
+
+		if (methodDesc.getAttributes().getNamedItem(Constants.XML_ELEMENT_ENTRY_POINT) != null) {
+			Boolean isEntryPoint = Boolean.valueOf(methodDesc.getAttributes().getNamedItem(Constants.XML_ELEMENT_ENTRY_POINT).getNodeValue());
+			MethodConfiguration.setMethodIsEntryPoint(configuration, isEntryPoint);
+			if (isEntryPoint) {
+				MethodConfiguration.setCloseAfterMethod(configuration, false);
+			}
+		} else {
+			MethodConfiguration.setMethodIsEntryPoint(configuration, false);
+		}
+		
         if (methodDesc.getAttributes().getNamedItem(Constants.XML_ELEMENT_METHOD_IS_STATIC) != null) {
             MethodConfiguration.setStatic(configuration, Boolean.valueOf(methodDesc.getAttributes()
                                                                                    .getNamedItem(Constants.XML_ELEMENT_METHOD_IS_STATIC)

@@ -20,6 +20,8 @@ package org.apache.skywalking.apm.commons.datacarrier;
 
 import org.apache.skywalking.apm.commons.datacarrier.buffer.BufferStrategy;
 import org.apache.skywalking.apm.commons.datacarrier.buffer.Channels;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.FQueueChannels;
+import org.apache.skywalking.apm.commons.datacarrier.buffer.QueueCodec;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.ConsumeDriver;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.ConsumerPool;
 import org.apache.skywalking.apm.commons.datacarrier.consumer.IConsumer;
@@ -27,32 +29,59 @@ import org.apache.skywalking.apm.commons.datacarrier.consumer.IDriver;
 import org.apache.skywalking.apm.commons.datacarrier.partition.IDataPartitioner;
 import org.apache.skywalking.apm.commons.datacarrier.partition.SimpleRollingPartitioner;
 
+import java.util.concurrent.ScheduledExecutorService;
+
 /**
  * DataCarrier main class. use this instance to set Producer/Consumer Model.
  */
 public class DataCarrier<T> {
-    private final int bufferSize;
-    private final int channelSize;
     private Channels<T> channels;
     private IDriver driver;
     private String name;
+    private int consumeCycle = 20;
 
     public DataCarrier(int channelSize, int bufferSize) {
         this("DEFAULT", channelSize, bufferSize);
     }
 
     public DataCarrier(String name, int channelSize, int bufferSize) {
-        this(name, name, channelSize, bufferSize);
+        this(name, name, channelSize, bufferSize, true);
     }
 
-    public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize) {
+	public DataCarrier(int channelSize, int bufferSize, boolean blockStrategy) {
+		this("DEFAULT", "DEFAULT", channelSize, bufferSize, blockStrategy);
+	}
+
+	public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize){
+		this(name, envPrefix, channelSize, bufferSize, true);
+	}
+
+    public DataCarrier(String name, String envPrefix, int channelSize, int bufferSize, boolean blockStrategy) {
         this.name = name;
-        this.bufferSize = EnvUtil.getInt(envPrefix + "_BUFFER_SIZE", bufferSize);
-        this.channelSize = EnvUtil.getInt(envPrefix + "_CHANNEL_SIZE", channelSize);
-        channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), BufferStrategy.BLOCKING);
+        bufferSize = EnvUtil.getInt(envPrefix + "_BUFFER_SIZE", bufferSize);
+        channelSize = EnvUtil.getInt(envPrefix + "_CHANNEL_SIZE", channelSize);
+		BufferStrategy strategy = BufferStrategy.IF_POSSIBLE;
+		if (blockStrategy) {
+			strategy = BufferStrategy.BLOCKING;
+		}
+		channels = new Channels<T>(channelSize, bufferSize, new SimpleRollingPartitioner<T>(), strategy);
     }
 
-    /**
+	public DataCarrier(String name, QueueCodec<T> codec, ScheduledExecutorService scheduler, String dbPath, int batchSize, int logSize) {
+		this.name = name;
+		this.channels = new FQueueChannels<T>(codec, scheduler,dbPath, batchSize, logSize);
+	}
+
+	public int getConsumeCycle() {
+		return consumeCycle;
+	}
+
+	public DataCarrier<T> setConsumeCycle(int consumeCycle) {
+		this.consumeCycle = consumeCycle;
+		return this;
+	}
+
+	/**
      * set a new IDataPartitioner. It will cover the current one or default one.(Default is {@link
      * SimpleRollingPartitioner}
      *
@@ -110,7 +139,7 @@ public class DataCarrier<T> {
      * @param num           number of consumer threads
      */
     public DataCarrier consume(Class<? extends IConsumer<T>> consumerClass, int num) {
-        return this.consume(consumerClass, num, 20);
+        return this.consume(consumerClass, num, consumeCycle);
     }
 
     /**
@@ -136,7 +165,7 @@ public class DataCarrier<T> {
      * @param num      number of consumer threads
      */
     public DataCarrier consume(IConsumer<T> consumer, int num) {
-        return this.consume(consumer, num, 20);
+        return this.consume(consumer, num, consumeCycle);
     }
 
     /**
@@ -159,5 +188,8 @@ public class DataCarrier<T> {
         if (driver != null) {
             driver.close(channels);
         }
+		if (channels != null) {
+			channels.close();
+		}
     }
 }
