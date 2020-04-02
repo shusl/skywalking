@@ -185,7 +185,7 @@ public class Config {
 		/**
 		 * log rotate size
 		 */
-		public static int LOG_SIZE = 1024 * 1024 * 30;
+		public static int LOG_SIZE = 1024 * 1024 * 100;
 		/**
 		 * fqueue scheduler threads
 		 */

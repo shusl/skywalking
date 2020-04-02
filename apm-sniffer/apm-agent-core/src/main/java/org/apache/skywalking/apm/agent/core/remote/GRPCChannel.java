@@ -24,6 +24,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -37,7 +38,12 @@ public class GRPCChannel {
 
     private GRPCChannel(String host, int port, List<ChannelBuilder> channelBuilders,
 						List<ChannelDecorator> decorators, EventLoopGroup eventLoopGroup) throws Exception {
-        ManagedChannelBuilder channelBuilder = NettyChannelBuilder.forAddress(host, port).eventLoopGroup(eventLoopGroup);
+		NettyChannelBuilder nettyChannelBuilder = NettyChannelBuilder.forAddress(host, port);
+		if (eventLoopGroup != null){
+			nettyChannelBuilder.eventLoopGroup(eventLoopGroup)
+					.channelType(NioSocketChannel.class);
+		}
+		ManagedChannelBuilder channelBuilder = nettyChannelBuilder;
 
         for (ChannelBuilder builder : channelBuilders) {
             channelBuilder = builder.build(channelBuilder);
